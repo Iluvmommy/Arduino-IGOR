@@ -8,12 +8,13 @@
 #include "functions.h"
 #include "secrets.h"
 
-OneButton btn = OneButton(7, true, true);
-LiquidCrystal lcd(0, 1, 2, 3, 4, 5);
-FirebaseData firebaseData;
+OneButton btn = OneButton(7, true, true); // initialize button
+LiquidCrystal lcd(0, 1, 2, 3, 4, 5);      // initialize lcd screen
+FirebaseData firebaseData;                // initialize firebase
 
 int status = WL_IDLE_STATUS;
-String USER = "Kaavya";
+String USER = "Kaavya"; // which user in database it should find
+String category = "videos"; // songs or videos
 
 void setup() {
   Serial.begin(2400);
@@ -24,54 +25,71 @@ void setup() {
   while (status != WL_CONNECTED) {
     Serial.print("Attempting to connect to SSID: ");
     Serial.println(WIFI_SSID);
-    status = WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    
+    status = WiFi.begin(WIFI_SSID, WIFI_PASSWORD); // connect with wifi until connected
+
     delay(10000);
   }
 
   printWifiStatus();
 
-  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH, WIFI_SSID, WIFI_PASSWORD);
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH, WIFI_SSID, WIFI_PASSWORD); // connect with firebase
   Firebase.reconnectWiFi(true);
 
-  btn.attachClick(reload);
-  
+  btn.attachClick(reload); // attach interrupt for button, reload is called everytime it is pressed
+
   Serial.println("Ready");
   printString("Ready :)");
 }
 
 static void reload() {
   Serial.println("getting from firebase");
-  QueryFilter query;
+
+  String creator = "artist";
+  String thing = "track";
+
+  if (category == "videos") {
+    creator = "channel";
+    thing = "title";
+  };
+  
+  QueryFilter query; // search latest entry on database
   query.clearQuery();
   query.orderBy("$key");
   query.limitToLast(1);
 
-  if (Firebase.getJSON(firebaseData, USER+"/songs", query)) {
+  // retrieve from firebase
+  if (Firebase.getJSON(firebaseData, USER + "/" + category, query)) {
     if (firebaseData.dataType() == "json") {
-      Serial.println(firebaseData.jsonData());
-      
+
+      // justs gets the child, aka reformatting retrieved data
       JSONVar res = JSON.parse(firebaseData.jsonData());
       JSONVar key = res.keys()[0];
       JSONVar json = res[key];
-            
+      Serial.println(firebaseData.jsonData());
+      Serial.println(json);
+
+      // if data is not correct format, dont go on and show error
       if (JSON.typeof(json) == "undefined" || JSON.typeof(json) != "object") {
         Serial.println("invalid result");
         printString("invalid result");
         return;
       }
 
+      // printing data
       lcd.clear();
       lcd.setCursor(0, 0);
-      if (json.hasOwnProperty("track")) {
-        lcd.print((String) JSON.stringify(json["track"]));
+
+      //either prints the track or title or "----"
+      if (json.hasOwnProperty(thing)) {
+        lcd.print((String) JSON.stringify(json[thing]));
       } else {
         lcd.print("----");
       }
 
       lcd.setCursor(0, 1);
-      if (json.hasOwnProperty("artist")) {
-        lcd.print((String) JSON.stringify(json["artist"]));
+      // either prints channel, artist, or "----"
+      if (json.hasOwnProperty(creator)) {
+        lcd.print((String) JSON.stringify(json[creator]));
       } else {
         lcd.print("----");
       }
@@ -85,6 +103,7 @@ static void reload() {
   }
 }
 
+// print anything on lcd screen
 void printString(String str) {
   lcd.clear();
   lcd.print(str);
@@ -92,6 +111,8 @@ void printString(String str) {
 
 void loop() {
   btn.tick();
+
+  // if wifi disconnects, reconnect
   while (status != WL_CONNECTED) {
     Serial.print("Attempting to connect to SSID: ");
     Serial.println(WIFI_SSID);
